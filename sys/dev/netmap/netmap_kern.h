@@ -58,6 +58,9 @@
 #if defined(CONFIG_NETMAP_SINK)
 #define WITH_SINK
 #endif
+#if defined(CONFIG_NETMAP_EBPF)
+#define WITH_EBPF
+#endif
 
 #elif defined (_WIN32)
 #define WITH_VALE	// comment out to disable VALE support
@@ -316,6 +319,12 @@ void nm_os_free(void *);
 void *nm_os_send_up(struct ifnet *, struct mbuf *m, struct mbuf *prev);
 
 int nm_os_mbuf_has_offld(struct mbuf *m);
+
+#ifdef WITH_EBPF
+/* attach/detach ebpf filter to netmap_fwd */
+int netmap_fwd_attach_ebpf(struct netmap_adapter *na, uint32_t ufd);
+int netmap_fwd_detach_ebpf(struct netmap_adapter *na);
+#endif
 
 #include "netmap_mbq.h"
 
@@ -795,6 +804,10 @@ struct netmap_adapter {
 	/* adapter used to attach the host rings of this adapter
 	 * to a VALE switch (if any) */
 	struct netmap_vp_adapter *na_hostvp;
+#endif
+
+#ifdef WITH_EBPF
+  struct bpf_prog *ebpf_filter;
 #endif
 
 	/* standard refcount to control the lifetime of the adapter

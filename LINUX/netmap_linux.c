@@ -25,6 +25,8 @@
 
 #include "bsd_glue.h"
 #include <linux/file.h>   /* fget(int fd) */
+#include <linux/filter.h>  /* ebpf */
+#include <linux/bpf.h>
 
 #include <net/netmap.h>
 #include <dev/netmap/netmap_kern.h>
@@ -2266,6 +2268,27 @@ nm_os_selrecord(NM_SELRECORD_T *sr, NM_SELINFO_T *si)
 	poll_wait(sr->file, si, sr->pwait);
 }
 
+int netmap_fwd_attach_ebpf(struct netmap_adapter *na, u32 ufd) {
+  struct bpf_prog *p;
+
+  p = bpf_prog_get_type(ufd, BPF_PROG_TYPE_XDP);
+  if (IS_ERR(p)) {
+    return PTR_ERR(p);
+  }
+
+  na->ebpf_filter = p;
+
+  return 0;
+}
+
+int netmap_fwd_detach_ebpf(struct netmap_adapter *na) {
+  if (na->ebpf_filter != NULL) {
+    bpf_prog_put(na->ebpf_filter);
+    na->ebpf_filter = NULL;
+  }
+  return 0;
+}
+
 module_init(linux_netmap_init);
 module_exit(linux_netmap_fini);
 
@@ -2300,6 +2323,10 @@ EXPORT_SYMBOL(netmap_mem_rings_delete);	/* used by veth module */
 EXPORT_SYMBOL(netmap_pipe_txsync);	/* used by veth module */
 EXPORT_SYMBOL(netmap_pipe_rxsync);	/* used by veth module */
 #endif /* WITH_PIPES */
+#ifdef WITH_EBPF
+EXPORT_SYMBOL(netmap_fwd_attach_ebpf);
+EXPORT_SYMBOL(netmap_fwd_detach_ebpf);
+#endif
 EXPORT_SYMBOL(netmap_verbose);
 
 MODULE_AUTHOR("http://info.iet.unipi.it/~luigi/netmap/");

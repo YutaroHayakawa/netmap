@@ -1098,6 +1098,11 @@ netmap_send_up(struct ifnet *dst, struct mbq *q)
 	mbq_fini(q);
 }
 
+struct netmap_fwd_buff {
+  void *data;
+  void *data_end;
+  void *data_hard_start;
+};
 
 /*
  * Scan the buffers from hwcur to ring->head, and put a copy of those
@@ -1123,6 +1128,18 @@ netmap_grab_packets(struct netmap_kring *kring, struct mbq *q, int force)
 			RD(5, "bad pkt at %d len %d", n, slot->len);
 			continue;
 		}
+
+    if (na->ebpf_filter) {
+      struct netmap_fwd_buff ctx;
+      ctx.data = NMB(na, slot);
+      ctx.data_end = NMB(na, slot) + slot->len;
+      ctx.data_hard_start = NMB(na, slot);
+
+      if (bpf_prog_run_xdp(na->ebpf_filter,
+            (struct xdp_buff *)&ctx))
+        continue;
+    }
+
 		slot->flags &= ~NS_FORWARD; // XXX needed ?
 		/* XXX TODO: adapt to the case of a multisegment packet */
 		m = m_devget(NMB(na, slot), slot->len, 0, na->ifp, NULL);
@@ -2303,6 +2320,19 @@ netmap_ioctl(struct netmap_priv_d *priv, u_long cmd, caddr_t data, struct thread
 			}
 			NMG_UNLOCK();
 			break;
+#ifdef WITH_EBPF
+    /* Interface for attaching ebpf program as a netmap_fwd classifier */
+    } else if (i == NETMAP_FWD_ATTACH_EBPF) {
+      NMG_LOCK();
+      error = netmap_fwd_attach_ebpf(priv->np_na, nmr->nr_arg1);
+      NMG_UNLOCK();
+      break;
+    } else if (i == NETMAP_FWD_DETACH_EBPF) {
+      NMG_LOCK();
+      error = netmap_fwd_detach_ebpf(priv->np_na);
+      NMG_UNLOCK();
+      break;
+#endif
 		} else if (i != 0) {
 			D("nr_cmd must be 0 not %d", i);
 			error = EINVAL;
