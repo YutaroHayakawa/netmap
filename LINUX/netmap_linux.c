@@ -2271,12 +2271,18 @@ nm_os_selrecord(NM_SELRECORD_T *sr, NM_SELINFO_T *si)
 int netmap_fwd_attach_ebpf(struct netmap_adapter *na, u32 ufd) {
   struct bpf_prog *p;
 
+  if (na->ebpf_filter) {
+    bpf_prog_put(na->ebpf_filter);
+  }
+
   p = bpf_prog_get_type(ufd, BPF_PROG_TYPE_XDP);
   if (IS_ERR(p)) {
     return PTR_ERR(p);
   }
 
   na->ebpf_filter = p;
+
+  printk("Attached ebpf program to interface %s", na->name);
 
   return 0;
 }
@@ -2285,7 +2291,9 @@ int netmap_fwd_detach_ebpf(struct netmap_adapter *na) {
   if (na->ebpf_filter != NULL) {
     bpf_prog_put(na->ebpf_filter);
     na->ebpf_filter = NULL;
+    printk("Detached ebpf program from interface %s", na->name);
   }
+
   return 0;
 }
 

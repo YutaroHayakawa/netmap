@@ -2895,6 +2895,10 @@ netmap_attach_common(struct netmap_adapter *na)
 		na->nm_bdg_attach = netmap_bwrap_attach;
 #endif
 
+#ifdef WITH_EBPF
+  na->ebpf_filter = NULL;
+#endif
+
 	return 0;
 }
 
