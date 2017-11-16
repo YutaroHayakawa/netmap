@@ -1098,12 +1098,6 @@ netmap_send_up(struct ifnet *dst, struct mbq *q)
 	mbq_fini(q);
 }
 
-struct netmap_fwd_buff {
-  void *data;
-  void *data_end;
-  void *data_hard_start;
-};
-
 /*
  * Scan the buffers from hwcur to ring->head, and put a copy of those
  * marked NS_FORWARD (or all of them if forced) into a queue of mbufs.
@@ -1129,16 +1123,19 @@ netmap_grab_packets(struct netmap_kring *kring, struct mbq *q, int force)
 			continue;
 		}
 
-    if (na->ebpf_filter) {
+#ifdef WITH_EBPF
+    if (na->ebpf_filter_rx) {
       struct netmap_fwd_buff ctx;
       ctx.data = NMB(na, slot);
       ctx.data_end = NMB(na, slot) + slot->len;
       ctx.data_hard_start = NMB(na, slot);
 
-      if (bpf_prog_run_xdp(na->ebpf_filter,
+      /* reuse xdp */
+      if (bpf_prog_run_xdp(na->ebpf_filter_rx,
             (struct xdp_buff *)&ctx))
         continue;
     }
+#endif
 
 		slot->flags &= ~NS_FORWARD; // XXX needed ?
 		/* XXX TODO: adapt to the case of a multisegment packet */
@@ -1210,6 +1207,20 @@ netmap_sw_to_nic(struct netmap_adapter *na)
 			src = &rxslot[rxcur];
 			if ((src->flags & NS_FORWARD) == 0 && !netmap_fwd)
 				continue;
+
+#ifdef WITH_EBPF
+      if (na->ebpf_filter_tx) {
+        struct netmap_fwd_buff ctx;
+        ctx.data = NMB(na, src);
+        ctx.data_end = NMB(na, src) + src->len;
+        ctx.data_hard_start = NMB(na, src);
+
+        /* reuse xdp */
+        if (bpf_prog_run_xdp(na->ebpf_filter_tx,
+              (struct xdp_buff *)&ctx))
+          continue;
+      }
+#endif
 
 			sent++;
 
@@ -2321,15 +2332,25 @@ netmap_ioctl(struct netmap_priv_d *priv, u_long cmd, caddr_t data, struct thread
 			NMG_UNLOCK();
 			break;
 #ifdef WITH_EBPF
-    /* Interface for attaching ebpf program as a netmap_fwd classifier */
-    } else if (i == NETMAP_FWD_ATTACH_EBPF) {
+    /* Interfaces for attaching ebpf program as a netmap_fwd classifier */
+    } else if (i == NETMAP_FWD_ATTACH_RX_EBPF) {
       NMG_LOCK();
-      error = netmap_fwd_attach_ebpf(priv->np_na, nmr->nr_arg1);
+      error = netmap_fwd_attach_ebpf(priv->np_na, nmr->nr_arg1, 0);
       NMG_UNLOCK();
       break;
-    } else if (i == NETMAP_FWD_DETACH_EBPF) {
+    } else if (i == NETMAP_FWD_DETACH_RX_EBPF) {
       NMG_LOCK();
-      error = netmap_fwd_detach_ebpf(priv->np_na);
+      error = netmap_fwd_detach_ebpf(priv->np_na, 0);
+      NMG_UNLOCK();
+      break;
+    } else if (i == NETMAP_FWD_ATTACH_TX_EBPF) {
+      NMG_LOCK();
+      error = netmap_fwd_attach_ebpf(priv->np_na, nmr->nr_arg1, 1);
+      NMG_UNLOCK();
+      break;
+    } else if (i == NETMAP_FWD_DETACH_TX_EBPF) {
+      NMG_LOCK();
+      error = netmap_fwd_detach_ebpf(priv->np_na, 1);
       NMG_UNLOCK();
       break;
 #endif
@@ -2896,7 +2917,8 @@ netmap_attach_common(struct netmap_adapter *na)
 #endif
 
 #ifdef WITH_EBPF
-  na->ebpf_filter = NULL;
+  na->ebpf_filter_rx = NULL;
+  na->ebpf_filter_tx = NULL;
 #endif
 
 	return 0;

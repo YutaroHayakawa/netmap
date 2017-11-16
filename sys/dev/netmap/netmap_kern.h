@@ -321,9 +321,23 @@ void *nm_os_send_up(struct ifnet *, struct mbuf *m, struct mbuf *prev);
 int nm_os_mbuf_has_offld(struct mbuf *m);
 
 #ifdef WITH_EBPF
-/* attach/detach ebpf filter to netmap_fwd */
-int netmap_fwd_attach_ebpf(struct netmap_adapter *na, uint32_t ufd);
-int netmap_fwd_detach_ebpf(struct netmap_adapter *na);
+/*
+ * Kernel side view of netmap ebpf context
+ * struct. It is binary compatible with
+ * XDP context struct.
+ */
+struct netmap_fwd_buff {
+  void *data;
+  void *data_end;
+  void *data_hard_start;
+};
+
+/* 
+ * attach/detach ebpf filter to netmap_fwd
+ * dir should be 0 (rx) or 1 (tx)
+ */
+int netmap_fwd_attach_ebpf(struct netmap_adapter *na, uint32_t ufd, int dir);
+int netmap_fwd_detach_ebpf(struct netmap_adapter *na, int dir);
 #endif
 
 #include "netmap_mbq.h"
@@ -807,7 +821,8 @@ struct netmap_adapter {
 #endif
 
 #ifdef WITH_EBPF
-  struct bpf_prog *ebpf_filter;
+  struct bpf_prog *ebpf_filter_rx;
+  struct bpf_prog *ebpf_filter_tx;
 #endif
 
 	/* standard refcount to control the lifetime of the adapter

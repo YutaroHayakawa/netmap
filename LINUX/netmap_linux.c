@@ -2268,31 +2268,61 @@ nm_os_selrecord(NM_SELRECORD_T *sr, NM_SELINFO_T *si)
 	poll_wait(sr->file, si, sr->pwait);
 }
 
-int netmap_fwd_attach_ebpf(struct netmap_adapter *na, u32 ufd) {
+static int _netmap_fwd_attach_ebpf(struct bpf_prog **prog_pp, u32 ufd) {
   struct bpf_prog *p;
-
-  if (na->ebpf_filter) {
-    bpf_prog_put(na->ebpf_filter);
-  }
 
   p = bpf_prog_get_type(ufd, BPF_PROG_TYPE_XDP);
   if (IS_ERR(p)) {
     return PTR_ERR(p);
   }
 
-  na->ebpf_filter = p;
+  if (*prog_pp) {
+    bpf_prog_put(*prog_pp);
+  }
 
-  printk("Attached ebpf program to interface %s", na->name);
+  *prog_pp = p;
 
   return 0;
 }
 
-int netmap_fwd_detach_ebpf(struct netmap_adapter *na) {
-  if (na->ebpf_filter != NULL) {
-    bpf_prog_put(na->ebpf_filter);
-    na->ebpf_filter = NULL;
-    printk("Detached ebpf program from interface %s", na->name);
+int netmap_fwd_attach_ebpf(struct netmap_adapter *na, u32 ufd, int dir) {
+  int err;
+
+  switch (dir) {
+    case 0: // rx
+      err = _netmap_fwd_attach_ebpf(&na->ebpf_filter_rx, ufd);
+    case 1: // tx
+      err = _netmap_fwd_attach_ebpf(&na->ebpf_filter_tx, ufd);
+    default:
+      return -EINVAL;
   }
+
+  const char *d = dir == 0 ? "rx" : "tx";
+  printk("Attached %s ebpf program to interface %s", d, na->name);
+
+  return 0;
+}
+
+static int _netmap_fwd_detach_ebpf(struct bpf_prog **prog_pp) {
+  if (*prog_pp != NULL) {
+    bpf_prog_put(*prog_pp);
+    *prog_pp = NULL;
+  }
+  return 0;
+}
+
+int netmap_fwd_detach_ebpf(struct netmap_adapter *na, int dir) {
+  switch (dir) {
+    case 0: // rx
+      _netmap_fwd_detach_ebpf(&na->ebpf_filter_rx);
+    case 1: // tx
+      _netmap_fwd_detach_ebpf(&na->ebpf_filter_tx);
+    default:
+      return -EINVAL;
+  }
+
+  const char *d = dir == 0 ? "rx" : "tx";
+  printk("Detached %s ebpf program from interface %s", d, na->name);
 
   return 0;
 }

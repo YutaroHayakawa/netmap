@@ -526,8 +526,13 @@ struct nmreq {
 #define NETMAP_BDG_POLLING_OFF	11	/* delete polling kthread */
 #define NETMAP_VNET_HDR_GET	12      /* get the port virtio-net-hdr length */
 #define NETMAP_POOLS_INFO_GET	13	/* get memory allocator pools info */
-#define NETMAP_FWD_ATTACH_EBPF 14 /* attach ebpf filter program to netmap fwd */
-#define NETMAP_FWD_DETACH_EBPF 15 /* detach ebpf filter program from netmap fwd */
+
+/* ebpf related cmds, it is only needed when you activate the ebpf subsystem */
+#define NETMAP_FWD_ATTACH_RX_EBPF 14 /* attach rx ebpf filter program to netmap fwd */
+#define NETMAP_FWD_DETACH_RX_EBPF 15 /* detach rx ebpf filter program from netmap fwd */
+#define NETMAP_FWD_ATTACH_TX_EBPF 16 /* attach rx ebpf filter program to netmap fwd */
+#define NETMAP_FWD_DETACH_TX_EBPF 17 /* detach rx ebpf filter program from netmap fwd */
+
 	uint16_t	nr_arg1;	/* reserve extra rings in NIOCREGIF */
 #define NETMAP_BDG_HOST		1	/* attach the host stack on ATTACH */
 
