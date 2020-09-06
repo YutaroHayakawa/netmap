@@ -915,8 +915,7 @@ nm_vale_flush(struct nm_bdg_fwd *ft, u_int n, struct netmap_vp_adapter *na,
 			continue; /* this packet is identified to be dropped */
 		else if (dst_port == NM_BDG_BROADCAST)
 			dst_ring = 0; /* broadcasts always go to ring 0 */
-		else if (unlikely(dst_port == me ||
-		    !b->bdg_ports[dst_port]))
+		else if (unlikely(!b->bdg_ports[dst_port]))
 			continue;
 
 		/* get a position in the scratch pad */
